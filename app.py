@@ -79,7 +79,7 @@ def create_user_table():
         conn.close()
 
 @app.route('/ping', methods=['GET'])
-def health_check():
+def ping():
     return jsonify({"status": "ok"}), 200
 
 # Register route
