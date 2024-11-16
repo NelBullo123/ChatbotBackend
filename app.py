@@ -78,6 +78,10 @@ def create_user_table():
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
 
+@app.route('/ping', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
 # Register route
 @app.route('/register', methods=['POST'])
 def register():
