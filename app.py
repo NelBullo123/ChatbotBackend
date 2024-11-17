@@ -84,14 +84,15 @@ def create_user_table():
         cursor = conn.cursor()
         try:
             cursor.execute(''' 
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    email TEXT NOT NULL UNIQUE,
-                    password TEXT NOT NULL,
-                    history TEXT,
-                    last_question TEXT
-                )
-            ''')
+            CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            history TEXT,
+            last_question TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Use default timestamp
+        )
+          ''')
             conn.commit()
 
             # Create super user if needed
@@ -201,17 +202,18 @@ def get_all_users():
         conn = get_db_connection()
         if conn is not None:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, email, history, last_question FROM users")
+            cursor.execute("SELECT id, email, history, last_question, created_at FROM users")
             users = cursor.fetchall()
             conn.close()
 
             # Prepare a list of user dictionaries
-            users_list = [{"id": user[0], "email": user[1], "history": user[2], "last_question": user[3]} for user in users]
+            users_list = [{"id": user[0], "email": user[1], "history": user[2], "last_question": user[3], "created_at": user[4]} for user in users]
             return jsonify({"users": users_list}), 200
         else:
             return jsonify({"message": "Failed to connect to the database"}), 500
     except Exception as e:
         return jsonify({"message": f"Error: {str(e)}"}), 500
+
     
 # Chat route using Cohere
 @app.route("/chat", methods=["POST"])
