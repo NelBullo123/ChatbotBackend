@@ -232,7 +232,7 @@ def get_all_users():
         
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, email, created_at FROM users")  # Fetch id, email, and created_at
+        cursor.execute("SELECT id, email FROM users")  # Fetch only id and email
         users = cursor.fetchall()
         conn.close()
 
@@ -240,7 +240,7 @@ def get_all_users():
             return jsonify({"message": "No users found"}), 404
 
         # Prepare a list of user dictionaries
-        users_list = [{"id": user[0], "email": user[1], "created_at": user[2]} for user in users]
+        users_list = [{"id": user[0], "email": user[1]} for user in users]
         return jsonify({"users": users_list}), 200
     except sqlite3.DatabaseError as db_error:
         print(f"Database Error: {db_error}")  # Log the database error
@@ -248,7 +248,6 @@ def get_all_users():
     except Exception as e:
         print(f"Error fetching users: {e}")  # Log any other exceptions
         return jsonify({"message": "An internal error occurred", "error": str(e)}), 500
-
 
 
     
