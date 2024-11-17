@@ -22,7 +22,7 @@ else:
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 CORS(app, origins="*", supports_credentials=True)
-
+    
 # SQLite database file path
 DATABASE_FILE = os.getenv('DATABASE_FILE', 'database.db')
 
@@ -163,6 +163,24 @@ def health_check():
     except Exception as e:
         return jsonify({"message": f"Error connecting to the database: {str(e)}"}), 500
 
+@app.route('/admin/users', methods=['GET'])
+def get_all_users():
+    try:
+        conn = get_db_connection()
+        if conn is not None:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, email, history, last_question FROM users")
+            users = cursor.fetchall()
+            conn.close()
+
+            # Prepare a list of user dictionaries
+            users_list = [{"id": user[0], "email": user[1], "history": user[2], "last_question": user[3]} for user in users]
+            return jsonify({"users": users_list}), 200
+        else:
+            return jsonify({"message": "Failed to connect to the database"}), 500
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"}), 500
+    
 # Chat route using Cohere
 @app.route("/chat", methods=["POST"])
 def chat():
