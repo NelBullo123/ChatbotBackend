@@ -117,7 +117,7 @@ def create_user_table():
         finally:
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
-
+        
 @app.route('/inspect', methods=['GET'])
 def inspect_table():
     try:
@@ -232,7 +232,7 @@ def get_all_users():
         
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, email FROM users")  # Fetch only id and email
+        cursor.execute("SELECT id, email, created_at FROM users")  # Fetch id, email, and created_at
         users = cursor.fetchall()
         conn.close()
 
@@ -240,7 +240,7 @@ def get_all_users():
             return jsonify({"message": "No users found"}), 404
 
         # Prepare a list of user dictionaries
-        users_list = [{"id": user[0], "email": user[1]} for user in users]
+        users_list = [{"id": user[0], "email": user[1], "created_at": user[2]} for user in users]
         return jsonify({"users": users_list}), 200
     except sqlite3.DatabaseError as db_error:
         print(f"Database Error: {db_error}")  # Log the database error
