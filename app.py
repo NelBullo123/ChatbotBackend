@@ -76,21 +76,23 @@ def create_super_user():
 
 
 
-def add_created_at_column():
+def add_registration_date_column():
     conn = get_db_connection()
     if conn:
         cursor = conn.cursor()
         try:
             cursor.execute('''
                 ALTER TABLE users
-                ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ADD COLUMN registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ''')
             conn.commit()
         except sqlite3.OperationalError as e:
+            # If the column already exists, sqlite3 will raise an error, which we catch here
             print(f"Error adding column: {e}")
         finally:
             cursor.close()
         conn.close()
+
 
 
 # Create user table if it doesn't exist
@@ -394,4 +396,5 @@ def save_user_history(email, user_message, bot_response):
 
 if __name__ == "__main__":
     create_user_table()
+    add_registration_date_column() 
     app.run(debug=True)
