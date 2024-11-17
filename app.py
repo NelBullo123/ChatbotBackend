@@ -100,14 +100,14 @@ def create_user_table():
         cursor = conn.cursor()
         try:
             cursor.execute(''' 
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                history TEXT,
-                last_question TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Ensure this column exists
-            )
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL UNIQUE,
+                    password TEXT NOT NULL,
+                    history TEXT,
+                    last_question TEXT,
+                    registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- Registration date
+                )
             ''')
             conn.commit()
 
@@ -232,7 +232,7 @@ def get_all_users():
         
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, email FROM users")  # Fetch only id and email
+        cursor.execute("SELECT id, email, registration_date FROM users") 
         users = cursor.fetchall()
         conn.close()
 
@@ -240,7 +240,7 @@ def get_all_users():
             return jsonify({"message": "No users found"}), 404
 
         # Prepare a list of user dictionaries
-        users_list = [{"id": user[0], "email": user[1]} for user in users]
+        users_list = [{"id": user[0], "email": user[1], "registration_date": user[2]} for user in users]
         return jsonify({"users": users_list}), 200
     except sqlite3.DatabaseError as db_error:
         print(f"Database Error: {db_error}")  # Log the database error
