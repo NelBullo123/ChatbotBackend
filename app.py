@@ -58,6 +58,25 @@ def get_db_connection():
         print(f"Error connecting to database: {e}")
         return None
 
+# Create super user if it doesn't exist
+def create_super_user():
+    conn = get_db_connection()
+    if conn is not None:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", ("ourchatbot32@gmail.com",))  # Super user email
+        user_exists = cursor.fetchone()
+        
+        if not user_exists:
+            hashed_password = generate_password_hash("chatbot32")  # Super user password
+            cursor.execute("INSERT INTO users (email, password, history, last_question) VALUES (?, ?, ?, ?)", 
+                           ("ourchatbot32@gmail.com", hashed_password, "", ""))  # Insert super user data
+            conn.commit()
+        
+        conn.close()
+
+
+
+
 # Create user table if it doesn't exist
 def create_user_table():
     conn = get_db_connection()
@@ -74,9 +93,51 @@ def create_user_table():
                 )
             ''')
             conn.commit()
+
+            # Create super user if needed
+            create_super_user()
+
         finally:
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
+
+
+# Login route
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+
+        print(f"Email: {email}, Password: {password}")  # Debugging print
+
+        if not email or not password:
+            return jsonify({'message': 'Missing email or password'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        user = cursor.fetchone()
+
+        if user and check_password_hash(user[2], password):  # Check if password matches
+            token = jwt.encode({
+                'user': email,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+            }, app.config['SECRET_KEY'], algorithm="HS256")
+
+            if email == "ourchatbot32@gmail.com":  # Check if the user is the super user
+                return jsonify({'token': token, 'redirect': '/admin'}), 200
+
+            return jsonify({'token': token}), 200
+        else:
+            return jsonify({'message': 'Invalid credentials'}), 401
+
+    except Exception as e:
+        print(f"Error: {e}")  # Log the exception in your server logs
+        return jsonify({'message': 'An internal error occurred'}), 500
+
+
 
 @app.route('/ping', methods=['GET'])
 def ping():
@@ -108,35 +169,6 @@ def register():
         print(f"Error during registration: {e}")  # Log the error
         return jsonify({"message": "Internal Server Error", "error": str(e)}), 500
 
-# Login route
-@app.route('/login', methods=['POST'])
-def login():
-    try:
-        data = request.json
-        email = data.get('email')
-        password = data.get('password')
-
-        if not email or not password:
-            return jsonify({'message': 'Missing email or password'}), 400
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
-        user = cursor.fetchone()
-
-        if user and check_password_hash(user[2], password):  # user[2] is the password field
-            token = jwt.encode({
-                'user': email,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-            }, app.config['SECRET_KEY'], algorithm="HS256")
-
-            return jsonify({'token': token}), 200
-        else:
-            return jsonify({'message': 'Invalid credentials'}), 401
-
-    except Exception as e:
-        print(f"Error: {e}")  # Log the exception in your server logs
-        return jsonify({'message': 'An internal error occurred'}), 500
 
 # Protected route
 @app.route('/protected', methods=['GET'])
