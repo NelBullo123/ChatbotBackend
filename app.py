@@ -97,7 +97,7 @@ def create_user_table():
         finally:
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
-
+        
 @app.route('/inspect', methods=['GET'])
 def inspect_table():
     try:
@@ -145,6 +145,8 @@ def login():
         print(f"Error: {e}")  # Log the exception in your server logs
         return jsonify({'message': 'An internal error occurred'}), 500
 
+
+
 @app.route('/ping', methods=['GET'])
 def ping():
     return jsonify({"status": "ok"}), 200
@@ -174,6 +176,7 @@ def register():
     except Exception as e:
         print(f"Error during registration: {e}")  # Log the error
         return jsonify({"message": "Internal Server Error", "error": str(e)}), 500
+
 
 # Protected route
 @app.route('/protected', methods=['GET'])
@@ -208,6 +211,7 @@ def get_all_users():
             return jsonify({"message": "Failed to connect to the database"}), 500
         
         cursor = conn.cursor()
+
         cursor.execute("SELECT id, email FROM users") 
         users = cursor.fetchall()
         conn.close()
@@ -225,6 +229,8 @@ def get_all_users():
         print(f"Error fetching users: {e}")  # Log any other exceptions
         return jsonify({"message": "An internal error occurred", "error": str(e)}), 500
 
+
+    
 # Chat route using Cohere
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -255,24 +261,116 @@ def chat():
 
     return jsonify({"response": response})
 
-# Handle the user's message and respond based on memory
-def handle_message(user_email, message):
-    # Generate a response using Cohere API or a basic response logic
-    response = "I'm processing your message. Please give me a moment..."
-    # Can integrate Cohere AI logic here to generate intelligent responses
+# Handle the user's message and respond accordingly
+def handle_message(user_email, user_message):
+    user_data = user_memory[user_email]
+    name = user_data.get("name")
+
+    # Detect if the user is speaking in Tagalog based on keywords
+    if is_tagalog(user_message):
+        return handle_tagalog_response(user_email, user_message)
+
+    # Check for Good Morning / Good Evening
+    if "good morning" in user_message.lower():
+        response = "Good morning! How can I assist you today?"
+        if name:
+            response = f"Good morning {name}! How can I assist you today?"
+    
+    elif "good evening" in user_message.lower():
+        response = "Good evening! How can I assist you tonight?"
+        if name:
+            response = f"Good evening {name}! How can I assist you tonight?"
+    
+    # Default English responses
+    elif "hello" in user_message.lower():
+        response = "Hi there! How can I help you today?"
+        if name:
+            response = f"Hello {name}! How can I assist you today?"
+        elif name is None:
+            response = "Hi there! What's your name?"
+    
+    elif "bye" in user_message.lower():
+        response = "Goodbye! Have a great day."
+
+    elif "my name is" in user_message.lower():
+        name = user_message.lower().split("my name is")[-1].strip()
+        user_data["name"] = name
+        response = f"Got it, {name}! I will remember your name."
+
+    elif "preferences" in user_message.lower():
+        response = f"Your current preferences are: {', '.join(user_data['preferences'])}"
+
+    elif "history" in user_message.lower():
+        history = user_data["history"]
+        if history:
+            response = "Here are your previous messages:\n" + "\n".join(history)
+        else:
+            response = "No history available."
+    
+    elif "last question" in user_message.lower():
+        last_question = user_data.get("last_question", "No questions yet.")
+        response = f"Your last question was: {last_question}"
+
+    else:
+        response = call_cohere_api(user_message)
+
     return response
 
-# Save user history in SQLite
-def save_user_history(user_email, user_message, response):
+# Check if the user's message is in Tagalog
+def is_tagalog(message):
+    tagalog_keywords = ['kamusta', 'magandang araw', 'salamat', 'paalam', 'kumusta', 'oo', 'hindi']
+    return any(keyword in message.lower() for keyword in tagalog_keywords)
+
+# Handle responses in Tagalog
+def handle_tagalog_response(user_email, user_message):
+    user_data = user_memory[user_email]
+    name = user_data.get("name")
+
+    if "kamusta" in user_message.lower() or "kumusta" in user_message.lower():
+        response = "Kamusta! Paano kita matutulungan ngayon?"
+        if name:
+            response = f"Kamusta {name}! Paano kita matutulungan?"
+        elif name is None:
+            response = "Kamusta! Anong pangalan mo?"
+
+    elif "magandang araw" in user_message.lower():
+        response = "Magandang araw! Paano kita matutulungan?"
+        if name:
+            response = f"Magandang araw {name}! Paano kita matutulungan?"
+
+    elif "salamat" in user_message.lower():
+        response = "Walang anuman! Ano pa ang maitutulong ko?"
+    
+    else:
+        return call_cohere_api(user_message)
+
+    return response
+
+# Call Cohere API for responses
+def call_cohere_api(message):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET history = history || ? WHERE email = ?", 
-                       (f"\nUser: {user_message}\nBot: {response}", user_email))
-        conn.commit()
-        conn.close()
+        response = co.generate(
+            model='command',
+            prompt=message,
+            max_tokens=150
+        )
+        return response.generations[0].text.strip()
     except Exception as e:
-        print(f"Error saving user history: {e}")  # Log the error if history can't be saved
+        return f"Error communicating with Cohere API: {str(e)}"
+
+# Save user history to SQLite database
+def save_user_history(email, user_message, bot_response):
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        user = cursor.fetchone()
+        
+        if user:
+            new_history = user[3] + f"User: {user_message}\nBot: {bot_response}\n"
+            cursor.execute("UPDATE users SET history = ? WHERE email = ?", (new_history, email))
+            conn.commit()
+        conn.close()
 
 if __name__ == "__main__":
     create_user_table()
