@@ -76,6 +76,22 @@ def create_super_user():
 
 
 
+def add_created_at_column():
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                ALTER TABLE users
+                ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ''')
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            print(f"Error adding column: {e}")
+        finally:
+            cursor.close()
+        conn.close()
+
 
 # Create user table if it doesn't exist
 def create_user_table():
@@ -85,14 +101,14 @@ def create_user_table():
         try:
             cursor.execute(''' 
             CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            history TEXT,
-            last_question TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Use default timestamp
-        )
-          ''')
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                history TEXT,
+                last_question TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Ensure this column exists
+            )
+            ''')
             conn.commit()
 
             # Create super user if needed
@@ -102,6 +118,17 @@ def create_user_table():
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
 
+@app.route('/inspect', methods=['GET'])
+def inspect_table():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(users);")
+        table_info = cursor.fetchall()
+        conn.close()
+        return jsonify({"table_info": table_info}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error inspecting table: {str(e)}"}), 500
 
 # Login route
 @app.route('/login', methods=['POST'])
@@ -200,19 +227,29 @@ def health_check():
 def get_all_users():
     try:
         conn = get_db_connection()
-        if conn is not None:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, email, history, last_question, created_at FROM users")
-            users = cursor.fetchall()
-            conn.close()
-
-            # Prepare a list of user dictionaries
-            users_list = [{"id": user[0], "email": user[1], "history": user[2], "last_question": user[3], "created_at": user[4]} for user in users]
-            return jsonify({"users": users_list}), 200
-        else:
+        if conn is None:
             return jsonify({"message": "Failed to connect to the database"}), 500
+        
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, email FROM users")  # Fetch only id and email
+        users = cursor.fetchall()
+        conn.close()
+
+        if not users:
+            return jsonify({"message": "No users found"}), 404
+
+        # Prepare a list of user dictionaries
+        users_list = [{"id": user[0], "email": user[1]} for user in users]
+        return jsonify({"users": users_list}), 200
+    except sqlite3.DatabaseError as db_error:
+        print(f"Database Error: {db_error}")  # Log the database error
+        return jsonify({"message": "Database error occurred", "error": str(db_error)}), 500
     except Exception as e:
-        return jsonify({"message": f"Error: {str(e)}"}), 500
+        print(f"Error fetching users: {e}")  # Log any other exceptions
+        return jsonify({"message": "An internal error occurred", "error": str(e)}), 500
+
+
 
     
 # Chat route using Cohere
