@@ -21,7 +21,7 @@ else:
     app.config.from_object('settings.DevelopmentConfig')
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-CORS(app, origins="https://chatbot32-e6oa.onrender.com", supports_credentials=True)
+CORS(app, origins="*", supports_credentials=True)
     
 # SQLite database file path
 DATABASE_FILE = os.getenv('DATABASE_FILE', 'database.db')
