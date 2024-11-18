@@ -86,8 +86,7 @@ def create_user_table():
                     email TEXT NOT NULL UNIQUE,
                     password TEXT NOT NULL,
                     history TEXT,
-                    last_question TEXT,
-                    is_disabled BOOLEAN DEFAULT 0  -- New column to mark if a user is disabled
+                    last_question TEXT
                 )
             ''')
             conn.commit()
@@ -98,7 +97,6 @@ def create_user_table():
         finally:
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
-
         
 @app.route('/inspect', methods=['GET'])
 def inspect_table():
@@ -111,33 +109,6 @@ def inspect_table():
         return jsonify({"table_info": table_info}), 200
     except Exception as e:
         return jsonify({"message": f"Error inspecting table: {str(e)}"}), 500
-
-@app.route('/admin/users/<int:user_id>/toggle_disable', methods=['PUT'])
-def toggle_user_disable(user_id):
-    try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({"message": "Failed to connect to the database"}), 500
-
-        cursor = conn.cursor()
-
-        # Check if the user exists
-        cursor.execute("SELECT id, is_disabled FROM users WHERE id = ?", (user_id,))
-        user = cursor.fetchone()
-        if user is None:
-            return jsonify({"message": "User not found"}), 404
-
-        # Toggle the user's disabled state
-        new_state = 0 if user[1] == 1 else 1  # Toggle between 0 and 1
-        cursor.execute("UPDATE users SET is_disabled = ? WHERE id = ?", (new_state, user_id))
-        conn.commit()
-        conn.close()
-
-        return jsonify({"disabled": new_state}), 200
-    except Exception as e:
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
-0
-
 
 # Login route
 @app.route('/login', methods=['POST'])
@@ -240,16 +211,8 @@ def get_all_users():
             return jsonify({"message": "Failed to connect to the database"}), 500
         
         cursor = conn.cursor()
-        
-        # Optional query parameter to include disabled users
-        include_disabled = request.args.get('include_disabled', 'false').lower() == 'true'
-        
-        # Fetch users based on whether we want to include disabled ones
-        if include_disabled:
-            cursor.execute("SELECT id, email, is_disabled FROM users")
-        else:
-            cursor.execute("SELECT id, email, is_disabled FROM users WHERE is_disabled = 0")
 
+        cursor.execute("SELECT id, email FROM users") 
         users = cursor.fetchall()
         conn.close()
 
@@ -257,7 +220,7 @@ def get_all_users():
             return jsonify({"message": "No users found"}), 404
 
         # Prepare a list of user dictionaries
-        users_list = [{"id": user[0], "email": user[1], "is_disabled": user[2]} for user in users]
+        users_list = [{"id": user[0], "email": user[1]} for user in users]
         return jsonify({"users": users_list}), 200
     except sqlite3.DatabaseError as db_error:
         print(f"Database Error: {db_error}")  # Log the database error
@@ -265,7 +228,6 @@ def get_all_users():
     except Exception as e:
         print(f"Error fetching users: {e}")  # Log any other exceptions
         return jsonify({"message": "An internal error occurred", "error": str(e)}), 500
-
 
 
     
