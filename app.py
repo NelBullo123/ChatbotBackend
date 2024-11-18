@@ -91,12 +91,20 @@ def create_user_table():
             ''')
             conn.commit()
 
+            # Ensure the 'disabled' column exists
+            cursor.execute("PRAGMA table_info(users);")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'disabled' not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN disabled INTEGER DEFAULT 0;")
+                conn.commit()
+
             # Create super user if needed
             create_super_user()
 
         finally:
             cursor.close()  # Explicitly close the cursor after use
         conn.close()
+
         
 @app.route('/inspect', methods=['GET'])
 def inspect_table():
@@ -110,7 +118,6 @@ def inspect_table():
     except Exception as e:
         return jsonify({"message": f"Error inspecting table: {str(e)}"}), 500
 
-# Login route
 @app.route('/login', methods=['POST'])
 def login():
     try:
@@ -128,22 +135,28 @@ def login():
         cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
         user = cursor.fetchone()
 
-        if user and check_password_hash(user[2], password):  # Check if password matches
-            token = jwt.encode({
-                'user': email,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-            }, app.config['SECRET_KEY'], algorithm="HS256")
+        if user:
+            if user[-1] == 1:  # Check if the 'disabled' column is set to 1
+                return jsonify({'message': 'Your account has been disabled. Please contact support.'}), 403
+            
+            if check_password_hash(user[2], password):  # Check if password matches
+                token = jwt.encode({
+                    'user': email,
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                }, app.config['SECRET_KEY'], algorithm="HS256")
 
-            if email == "ourchatbot32@gmail.com":  # Check if the user is the super user
-                return jsonify({'token': token, 'redirect': '/admin'}), 200
+                if email == "ourchatbot32@gmail.com":  # Check if the user is the super user
+                    return jsonify({'token': token, 'redirect': '/admin'}), 200
 
-            return jsonify({'token': token}), 200
-        else:
-            return jsonify({'message': 'Invalid credentials'}), 401
+                return jsonify({'token': token}), 200
+        
+        # If credentials are invalid or user does not exist
+        return jsonify({'message': 'Invalid credentials'}), 401
 
     except Exception as e:
         print(f"Error: {e}")  # Log the exception in your server logs
         return jsonify({'message': 'An internal error occurred'}), 500
+
 
 
 
@@ -203,31 +216,26 @@ def health_check():
     except Exception as e:
         return jsonify({"message": f"Error connecting to the database: {str(e)}"}), 500
 
-@app.route('/admin/users', methods=['GET'])
-def get_all_users():
+@app.route('/admin/users/<int:user_id>/toggle_disable', methods=['PUT'])
+def toggle_user_disable(user_id):
     try:
         conn = get_db_connection()
-        if conn is None:
-            return jsonify({"message": "Failed to connect to the database"}), 500
-        
         cursor = conn.cursor()
+        cursor.execute("SELECT disabled FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
 
-        cursor.execute("SELECT id, email FROM users") 
-        users = cursor.fetchall()
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+
+        new_status = 0 if user[0] else 1
+        cursor.execute("UPDATE users SET disabled = ? WHERE id = ?", (new_status, user_id))
+        conn.commit()
         conn.close()
 
-        if not users:
-            return jsonify({"message": "No users found"}), 404
-
-        # Prepare a list of user dictionaries
-        users_list = [{"id": user[0], "email": user[1]} for user in users]
-        return jsonify({"users": users_list}), 200
-    except sqlite3.DatabaseError as db_error:
-        print(f"Database Error: {db_error}")  # Log the database error
-        return jsonify({"message": "Database error occurred", "error": str(db_error)}), 500
+        return jsonify({"message": "User status updated", "disabled": new_status}), 200
     except Exception as e:
-        print(f"Error fetching users: {e}")  # Log any other exceptions
-        return jsonify({"message": "An internal error occurred", "error": str(e)}), 500
+        return jsonify({"message": f"An error occurred: {str(e)}"}), 500
+
 
 
     
